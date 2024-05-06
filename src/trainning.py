@@ -1,19 +1,31 @@
 #!/usr/bin/env python3
 
+import random
+import pickle
+
 import torch as tr
 import numpy as np
 import matplotlib.pyplot as pt
-import random
 
 from models import Prooformer
-from dataloader import examples, goal_tokens, label_tokens, idx2goal, idx2label
+
 from time import perf_counter
 
 dev = tr.device("cuda") if tr.cuda.is_available() else tr.device("cpu")
 print(f"device = {dev}")
 
+with open("dataset.pkl", "rb") as f:
+    examples = pickle.load(f)
+    idx2goal = pickle.load(f)
+    idx2label = pickle.load(f)
+    len_goal_tokens = pickle.load(f)
+    len_label_tokens = pickle.load(f)
+
+data_size = 1000
+examples = examples[:data_size]
 random.shuffle(examples)
-train_samples, test_samples = examples[:-10], examples[-10:]
+train_size = int(0.9 * len(examples))
+train_samples, test_samples = examples[:-train_size], examples[-train_size:]
 
 # for goal, labels in test_samples:
 #   print([idx2goal[tok] for tok in goal], [idx2label[tok] for tok in labels])
@@ -27,7 +39,7 @@ num_layers = 2
 batch_size = 1
 
 model = Prooformer(
-    d_model, max_len, num_layers, len(goal_tokens), len(label_tokens)
+    d_model, max_len, num_layers, len_goal_tokens, len_label_tokens
 ).to(dev)
 loss_fn = tr.nn.CrossEntropyLoss()
 opt = tr.optim.Adam(model.parameters(), lr=0.00005)
