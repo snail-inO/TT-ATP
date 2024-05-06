@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import pickle
 
 from metamathpy.database import parse
 from metamathpy.proof import verify_proof
@@ -29,8 +30,6 @@ for r, rule in enumerate(db.rules.values()):
     label_tokens |= set(labels)
 
     examples.append((goal, labels))
-    if len(examples) == 1000:
-        break
 
 print("raw examples:")
 print("example 0:", examples[0])
@@ -53,8 +52,13 @@ if __name__ == "__main__":
     print("example 0:", examples[0])
     print("example -1:", examples[-1])
     print(f"{len(goal_tokens)} goal tokens, {len(label_tokens)} label tokens")
-    print(goal_tokens)
-    print(label_tokens)
+
+    with open("dataset.pkl", "wb") as f:
+        pickle.dump(examples, f)
+        pickle.dump(idx2goal, f)
+        pickle.dump(idx2label, f)
+        pickle.dump(len(goal_tokens), f)
+        pickle.dump(len(label_tokens), f)
 
     pt.hist([len(proof) for (goal, proof) in examples], bins=100)
     pt.xlabel("Proof length")
