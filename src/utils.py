@@ -47,6 +47,28 @@ def extract_proof_labels(proof_root):
     labels.append(rule.consequent.label)
     return labels
 
+class TreeNode:
+    def __init__(self):
+        self.value = []
+        self.children = []
+    def __repr__(self):
+        return f"TreeNode({self.value}, {self.children})"
+    def __eq__(self, other):
+        return self.value == other.value and self.children == other.children
+    
+def build_tree(expression):
+    def helper(it):
+        node = TreeNode()
+        for token in it:
+            if token == '(':
+                node.children.append(helper(it))
+            elif token == ')':
+                return node
+            else:
+                node.value.append(token)
+        return node
+
+    return helper(iter(expression))
 
 if __name__ == "__main__":
     # Test causal_mask
