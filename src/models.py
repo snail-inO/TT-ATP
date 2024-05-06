@@ -4,6 +4,59 @@ import torch as tr
 
 from utils import causal_mask, PositionalEncoding
 
+class ChildSumTreeLSTMCell(tr.nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(ChildSumTreeLSTMCell, self).__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+
+        self.W_iou = tr.nn.Linear(input_size, 3 * hidden_size)
+        self.U_iou = tr.nn.Linear(hidden_size, 3 * hidden_size, bias=False)
+        self.W_f = tr.nn.Linear(input_size, hidden_size)
+        self.U_f = tr.nn.Linear(hidden_size, hidden_size, bias=False)
+
+    def forward(self, x, child_c, child_h):
+        # Concatenate child hidden states
+        child_h_sum = tr.sum(tr.stack(child_h), dim=0)
+
+        # Compute input, output, and update gates
+        iou = self.W_iou(x) + self.U_iou(child_h_sum)
+        i, o, u = tr.chunk(iou, 3, dim=-1)
+        i, o, u = tr.sigmoid(i), tr.sigmoid(o), tr.tanh(u)
+
+        # Compute forget gate
+        f = tr.sigmoid(self.W_f(x) + self.U_f(child_h_sum))
+
+        # Compute cell state and hidden state
+        c = tr.sum(f * tr.stack(child_c), dim=0) + i * u
+        h = o * tr.tanh(c)
+
+        return c, h
+
+class ChildSumTreeLSTM(tr.nn.Module):
+    def __init__(self, input_size, hidden_size):
+        super(ChildSumTreeLSTM, self).__init__()
+        self.cell = ChildSumTreeLSTMCell(input_size, hidden_size)
+        self.hidden_size = hidden_size
+        self.input_size = input_size
+
+    def forward(self, node):
+        cell_states, hidden_states = [], []
+        if not isinstance(node, dict):
+            return [tr.zeros(self.input_size, self.hidden_size)], [tr.zeros(self.input_size, self.hidden_size)]
+        else:
+            for k, v in node.items():
+                cells, hiddens = self.forward(v)
+
+            # Compute cell state and hidden state using ChildSumTreeLSTMCell
+            input_features = node["$r"]
+            cell_state, hidden_state = self.cell(input_features, cells, hiddens)
+
+        # Append the computed states to the list
+        cell_states.append(cell_state)
+        hidden_states.append(hidden_state)
+
+        return cell_states, hidden_states
 
 class Prooformer(tr.nn.Module):
     def __init__(self, d_model, max_len, num_layers, num_goal_tokens, num_proof_tokens):
