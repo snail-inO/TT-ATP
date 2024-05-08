@@ -118,7 +118,7 @@ for update in range(num_updates):
         # forward
         goal_copied = goal.copy()
         proofs = tr.tensor([proof]).to(dev)
-        goals = tr.tensor([goal]).to(dev)
+        # goals = tr.tensor([goal]).to(dev)
         goals = [tersorize_tree(goal_copied, max_goal_len, dev)]
         embedded_goals = []
         
