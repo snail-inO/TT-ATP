@@ -55,6 +55,11 @@ class TreeNode:
         return f"TreeNode({self.value}, {self.children})"
     def __eq__(self, other):
         return self.value == other.value and self.children == other.children
+    def copy(self):
+        new_node = TreeNode()
+        new_node.value = self.value.copy()
+        new_node.children = [child.copy() for child in self.children]
+        return new_node
     
 def build_tree(expression):
     def helper(it):
@@ -69,6 +74,26 @@ def build_tree(expression):
         return node
 
     return helper(iter(expression))
+
+def traverse_tree(node, f):
+    node.children = [traverse_tree(child, f) for child in node.children]
+    for i, token in enumerate(node.value):
+        node.value[i] = f(token)
+    return node
+
+def tersorize_tree(node, size, dev):
+    node.children = [tersorize_tree(child, size, dev) for child in node.children]
+    node.value = tr.tensor(node.value).clone().detach().to(dev)
+
+    # Calculate the required padding
+    padding = size - node.value.size(0)
+    
+    # Pad the tensor
+    node.value = tr.nn.functional.pad(node.value, (0, max(padding, 0)))
+    return node
+    
+def max_value_len(node):
+    return max([max_value_len(child) for child in node.children] + [len(node.value)])
 
 if __name__ == "__main__":
     # Test causal_mask
