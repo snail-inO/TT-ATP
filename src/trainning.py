@@ -7,7 +7,8 @@ import torch as tr
 import numpy as np
 import matplotlib.pyplot as pt
 
-from models import Prooformer
+from models import Prooformer, ChildSumTreeLSTM
+from utils import tersorize_tree, traverse_tree
 
 from time import perf_counter
 
@@ -20,10 +21,11 @@ with open("dataset.pkl", "rb") as f:
     idx2label = pickle.load(f)
     len_goal_tokens = pickle.load(f)
     len_label_tokens = pickle.load(f)
+    max_goal_len = pickle.load(f)
 
 data_size = 1000
 examples = examples[:data_size]
-random.shuffle(examples)
+# random.shuffle(examples)
 train_size = int(0.9 * len(examples))
 train_samples, test_samples = examples[:-train_size], examples[-train_size:]
 
@@ -38,6 +40,7 @@ max_len = 2048
 num_layers = 2
 batch_size = 1
 
+embedder = ChildSumTreeLSTM(max_goal_len, d_model).to(dev)
 model = Prooformer(
     d_model, max_len, num_layers, len_goal_tokens, len_label_tokens
 ).to(dev)
@@ -55,15 +58,21 @@ for update in range(num_updates):
     for b in range(batch_size):
         example = train_samples[example_idx % len(train_samples)]
         example_idx += 1
-
+        if not isinstance(example[0].value, tr.Tensor):
+            tersorize_tree(example[0], max_goal_len, dev)
         goals.append(example[0])
         proofs.append(example[1])
 
     # forward
-    goals, proofs = tr.tensor(goals).to(dev), tr.tensor(proofs).to(dev)
+    proofs = tr.tensor(proofs).to(dev)
     full_proofs = proofs
     proofs, targs = proofs[:, :-1], proofs[:, 1:]
-    logits = model(proofs, goals)
+    embedded_goals = []
+    for goal in goals:
+        _, hidden_states = embedder(goal)
+        embedded_goals.append(hidden_states[-1])
+    embedded_goals = tr.stack(embedded_goals)
+    logits = model(proofs, embedded_goals)
 
     # loss
     logits = logits.flatten(end_dim=-2)  # flatten batch and sequence dims
@@ -87,15 +96,25 @@ for update in range(num_updates):
     if update % test_period != 0:
         continue
 
+    embedder.eval()
     model.eval()
 
     test_loss, test_accu = [], []
     for b, (goal, proof) in enumerate(test_samples):
 
         # forward
-        goals, proofs = tr.tensor([goal]).to(dev), tr.tensor([proof]).to(dev)
+        goal_copied = goal.copy()
+        proofs = tr.tensor([proof]).to(dev)
+        goals = [tersorize_tree(goal_copied, max_goal_len, dev)]
+        embedded_goals = []
+        
+        for goal in goals:
+            _, hidden_states = embedder(goal)
+            embedded_goals.append(hidden_states[-1])
+        embedded_goals = tr.stack(embedded_goals)
+        
         proofs, targs = proofs[:, :-1], proofs[:, 1:]
-        logits = model(proofs, goals)
+        logits = model(proofs, embedded_goals)
 
         # loss
         logits = logits.flatten(end_dim=-2)  # flatten batch and sequence dims
@@ -104,15 +123,24 @@ for update in range(num_updates):
         test_accu.append((logits.argmax(dim=-1) == targs).to(float).mean().item())
 
         if np.isnan(test_loss[-1]):
-            print([idx2goal[tok] for tok in goal])
-            print(test_loss, test_accu)
-            print(goals, proofs, targs)
-            input(".")
+            temp_goal = goal.copy()
+            traverse_tree(temp_goal, lambda x: idx2goal[x])
+            print(temp_goal)
+            # print(test_loss)
+            # print(test_accu)
+            print(proofs)
+            print(targs)
+            print()
+            # input(".")
 
     print(f"\n***test loss = {np.mean(test_loss)}, accu = {np.mean(test_accu)}\n")
 
+    embedder.train()
     model.train()
-tr.save(model.state_dict(), "model.pth")
+
+
+tr.save(embedder.state_dict(), "embedder2.pth")
+tr.save(model.state_dict(), "model2.pth")
 print(f"total time = {perf_counter()-start}s")
 
 pt.subplot(1,2,1)
@@ -123,4 +151,4 @@ pt.subplot(1,2,2)
 pt.plot(accu_curve[::20])
 pt.ylabel("Accuracy")
 pt.xlabel("Update")
-pt.savefig("training_curve.png")
+pt.savefig("training_curve4.png")
