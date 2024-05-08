@@ -159,12 +159,12 @@ tr.save(model.state_dict(), "model0.pth")
 print(f"total time = {perf_counter()-start}s")
 
 
-with open("train_result_2b.pkl", "wb") as f:
+with open("train_result_0.pkl", "wb") as f:
     pickle.dump(loss_curve, f)
     pickle.dump(accu_curve, f)
     pickle.dump(norm_curve, f)
 
-with open("validate_result_2b.pkl", "wb") as f:
+with open("validate_result_0.pkl", "wb") as f:
     pickle.dump(validate_loss, f)
     pickle.dump(validate_accu, f)
 
