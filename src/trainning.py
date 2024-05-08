@@ -5,7 +5,6 @@ import pickle
 
 import torch as tr
 import numpy as np
-import matplotlib.pyplot as pt
 
 from models import Prooformer, ChildSumTreeLSTM
 from utils import tersorize_tree, traverse_tree
@@ -23,21 +22,24 @@ with open("dataset.pkl", "rb") as f:
     len_label_tokens = pickle.load(f)
     max_goal_len = pickle.load(f)
 
+print(f"dataset size = {len(examples)}")
 data_size = 1000
 examples = examples[:data_size]
-# random.shuffle(examples)
-train_size = int(0.9 * len(examples))
-train_samples, test_samples = examples[:-train_size], examples[-train_size:]
+random.seed(8762)
+random.shuffle(examples)
 
-# for goal, labels in test_samples:
-#   print([idx2goal[tok] for tok in goal], [idx2label[tok] for tok in labels])
-# input('.')
+train_size = int(0.7 * len(examples))
+val_size = int(0.15 * len(examples))
+
+train_samples = examples[:train_size]
+test_samples = examples[train_size:train_size + val_size]
+val_samples = examples[train_size + val_size:]
 
 num_updates = 10000
 test_period = 500
 d_model = 256
 max_len = 2048
-num_layers = 2
+num_layers = 4
 batch_size = 1
 
 embedder = ChildSumTreeLSTM(max_goal_len, d_model).to(dev)
@@ -49,6 +51,7 @@ opt = tr.optim.Adam(model.parameters(), lr=0.00005)
 
 start = perf_counter()
 loss_curve = []
+norm_curve = []
 accu_curve = []
 example_idx = 0
 for update in range(num_updates):
@@ -65,6 +68,7 @@ for update in range(num_updates):
 
     # forward
     proofs = tr.tensor(proofs).to(dev)
+    # goals = tr.tensor(goals).to(dev)
     full_proofs = proofs
     proofs, targs = proofs[:, :-1], proofs[:, 1:]
     embedded_goals = []
@@ -73,38 +77,48 @@ for update in range(num_updates):
         embedded_goals.append(hidden_states[-1])
     embedded_goals = tr.stack(embedded_goals)
     logits = model(proofs, embedded_goals)
+    # logits = model(proofs, goals)
 
     # loss
     logits = logits.flatten(end_dim=-2)  # flatten batch and sequence dims
     targs = targs[:, -max_len:].flatten()  # flatten batch and sequence dims
     loss = loss_fn(logits, targs)
 
-    # print(goals, proofs, targs)
-
     # backward
     opt.zero_grad()
     loss.backward()
+
+    # Compute the norm of the gradient
+    grad_norm = 0.0
+    for param in model.parameters():
+        if param.grad is not None:
+            grad_norm += param.grad.data.norm(2).item()
+    grad_norm = grad_norm ** 0.5
+
+    norm_curve.append(grad_norm)
+
     opt.step()
 
     # progress
     loss_curve.append(loss.item())
     accu_curve.append((logits.argmax(dim=-1) == targs).to(float).mean().item())
     if update % 100 == 0:
-        print(f"update {update}: loss={loss_curve[-1]}, accu={accu_curve[-1]}")
+        print(f"update {update}: loss={loss_curve[-1]}, accu={accu_curve[-1]}, norm={norm_curve[-1]}")
 
-    # test
+    # validation
     if update % test_period != 0:
         continue
 
     embedder.eval()
     model.eval()
 
-    test_loss, test_accu = [], []
-    for b, (goal, proof) in enumerate(test_samples):
+    validate_loss, validate_accu = [], []
+    for b, (goal, proof) in enumerate(val_samples):
 
         # forward
         goal_copied = goal.copy()
         proofs = tr.tensor([proof]).to(dev)
+        goals = tr.tensor([goal]).to(dev)
         goals = [tersorize_tree(goal_copied, max_goal_len, dev)]
         embedded_goals = []
         
@@ -115,14 +129,15 @@ for update in range(num_updates):
         
         proofs, targs = proofs[:, :-1], proofs[:, 1:]
         logits = model(proofs, embedded_goals)
+        # logits = model(proofs, goals)
 
         # loss
         logits = logits.flatten(end_dim=-2)  # flatten batch and sequence dims
         targs = targs[:, -max_len:].flatten()  # flatten batch and sequence dims
-        test_loss.append(loss_fn(logits, targs).item())
-        test_accu.append((logits.argmax(dim=-1) == targs).to(float).mean().item())
+        validate_loss.append(loss_fn(logits, targs).item())
+        validate_accu.append((logits.argmax(dim=-1) == targs).to(float).mean().item())
 
-        if np.isnan(test_loss[-1]):
+        if np.isnan(validate_loss[-1]):
             temp_goal = goal.copy()
             traverse_tree(temp_goal, lambda x: idx2goal[x])
             print(temp_goal)
@@ -133,22 +148,23 @@ for update in range(num_updates):
             print()
             # input(".")
 
-    print(f"\n***test loss = {np.mean(test_loss)}, accu = {np.mean(test_accu)}\n")
+    print(f"\n***validation loss = {np.mean(validate_loss)}, accu = {np.mean(validate_accu)}\n")
 
     embedder.train()
     model.train()
 
 
-tr.save(embedder.state_dict(), "embedder2.pth")
-tr.save(model.state_dict(), "model2.pth")
+tr.save(embedder.state_dict(), "embedder1.pth")
+tr.save(model.state_dict(), "model1.pth")
 print(f"total time = {perf_counter()-start}s")
 
-pt.subplot(1,2,1)
-pt.plot(loss_curve[::10])
-pt.ylabel("Loss")
-pt.xlabel("Update")
-pt.subplot(1,2,2)
-pt.plot(accu_curve[::20])
-pt.ylabel("Accuracy")
-pt.xlabel("Update")
-pt.savefig("training_curve4.png")
+
+# with open("train_result_2b.pkl", "wb") as f:
+#     pickle.dump(loss_curve, f)
+#     pickle.dump(accu_curve, f)
+#     pickle.dump(norm_curve, f)
+
+# with open("validate_result_2b.pkl", "wb") as f:
+#     pickle.dump(validate_loss, f)
+#     pickle.dump(validate_accu, f)
+
