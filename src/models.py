@@ -95,7 +95,8 @@ class Prooformer(tr.nn.Module):
 
         # embed and position encode
         proofs = self.pos_enc(self.proof_embedding(proofs[:, -self.max_len :]))
-        # goals = self.pos_enc(self.goal_embedding(goals[:, -self.max_len :]))
+        goals = self.pos_enc((goals[:, -self.max_len :]))
+        # goals = self.pos_enc(self.goal_embedding(goals[:, -self.max_len:]))
 
         # transformer
         mask = causal_mask(proofs.shape[1])
