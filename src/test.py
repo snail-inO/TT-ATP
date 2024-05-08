@@ -41,8 +41,8 @@ model = Prooformer(
     d_model, max_len, num_layers, len_goal_tokens, len_label_tokens
 ).to(dev)
 
-embedder.load_state_dict(tr.load("embedder1.pth"))
-model.load_state_dict(tr.load("model1.pth"))
+embedder.load_state_dict(tr.load("embedder0.pth"))
+model.load_state_dict(tr.load("model0.pth"))
 
 embedder.eval()
 model.eval()
@@ -76,6 +76,6 @@ for b, (goal, proof) in enumerate(test_samples):
 
 print(f"\n***test loss = {np.mean(test_loss)}, accu = {np.mean(test_accu)}\n")
 
-with open(f"test_result_1.pkl", "wb") as f:
+with open(f"test_result_0.pkl", "wb") as f:
     pickle.dump(test_loss, f)
     pickle.dump(test_accu, f)

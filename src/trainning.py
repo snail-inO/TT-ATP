@@ -154,8 +154,8 @@ for update in range(num_updates):
     model.train()
 
 
-tr.save(embedder.state_dict(), "embedder1.pth")
-tr.save(model.state_dict(), "model1.pth")
+tr.save(embedder.state_dict(), "embedder0.pth")
+tr.save(model.state_dict(), "model0.pth")
 print(f"total time = {perf_counter()-start}s")
 
 

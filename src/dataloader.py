@@ -61,7 +61,7 @@ if __name__ == "__main__":
     print(f"{len(goal_tokens)} goal tokens, {len(label_tokens)} label tokens")
     print(f"max goal tree node size: {max_goal_len}")
 
-    with open("dataset0.pkl", "wb") as f:
+    with open("dataset.pkl", "wb") as f:
         pickle.dump(examples, f)
         pickle.dump(idx2goal, f)
         pickle.dump(idx2label, f)
