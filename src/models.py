@@ -4,6 +4,7 @@ import torch as tr
 
 from utils import causal_mask, PositionalEncoding
 
+
 class ChildSumTreeLSTMCell(tr.nn.Module):
     def __init__(self, input_size, hidden_size):
         super(ChildSumTreeLSTMCell, self).__init__()
@@ -33,6 +34,7 @@ class ChildSumTreeLSTMCell(tr.nn.Module):
 
         return c, h
 
+
 class ChildSumTreeLSTM(tr.nn.Module):
     def __init__(self, input_size, hidden_size):
         super(ChildSumTreeLSTM, self).__init__()
@@ -42,21 +44,28 @@ class ChildSumTreeLSTM(tr.nn.Module):
 
     def forward(self, node):
         cell_states, hidden_states = [], []
-        if not isinstance(node, dict):
-            return [tr.zeros(self.input_size, self.hidden_size)], [tr.zeros(self.input_size, self.hidden_size)]
+        if node.children == []:
+            cell_state, hidden_state = self.cell(
+                node.value.float(),
+                [tr.zeros(self.input_size, self.hidden_size, device=node.value.device)],
+                [tr.zeros(self.input_size, self.hidden_size, device=node.value.device)],
+            )
         else:
-            for k, v in node.items():
-                cells, hiddens = self.forward(v)
+            cells, hiddens = [], []
+            for child in node.children:
+                child_cell_states, child_hidden_states = self.forward(child)
+                cells.extend(child_cell_states)
+                hiddens.extend(child_hidden_states)
 
             # Compute cell state and hidden state using ChildSumTreeLSTMCell
-            input_features = node["$r"]
-            cell_state, hidden_state = self.cell(input_features, cells, hiddens)
+            cell_state, hidden_state = self.cell(node.value.float(), cells, hiddens)
 
         # Append the computed states to the list
         cell_states.append(cell_state)
         hidden_states.append(hidden_state)
 
         return cell_states, hidden_states
+
 
 class Prooformer(tr.nn.Module):
     def __init__(self, d_model, max_len, num_layers, num_goal_tokens, num_proof_tokens):
@@ -71,7 +80,7 @@ class Prooformer(tr.nn.Module):
         self.pos_enc = PositionalEncoding(d_model, max_len, 10000)
         self.trf = tr.nn.Transformer(
             d_model,
-            nhead=8,
+            nhead=4,
             num_encoder_layers=num_layers,
             num_decoder_layers=num_layers,
             batch_first=True,
@@ -86,7 +95,7 @@ class Prooformer(tr.nn.Module):
 
         # embed and position encode
         proofs = self.pos_enc(self.proof_embedding(proofs[:, -self.max_len :]))
-        goals = self.pos_enc(self.goal_embedding(goals[:, -self.max_len :]))
+        # goals = self.pos_enc(self.goal_embedding(goals[:, -self.max_len :]))
 
         # transformer
         mask = causal_mask(proofs.shape[1])
